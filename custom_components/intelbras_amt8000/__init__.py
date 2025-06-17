@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("Performing initial data fetch for coordinator.")
     try:
-        await coordinator.async_update_data()
+        await coordinator.async_config_entry_first_refresh()
     except (CommunicationError, AuthError) as ex:
         _LOGGER.error("Failed to connect or authenticate to AMT-8000 panel: %s", ex)
         raise ConfigEntryNotReady from ex
