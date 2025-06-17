@@ -22,11 +22,10 @@ DATA_SCHEMA = vol.Schema(
     }
 )
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Intelbras AMT 8000."""
+# ... (imports existentes) ...
 
-    VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    # ... (VERSION y CONNECTION_CLASS) ...
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -38,9 +37,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             port = user_input[CONF_PORT]
             password = user_input[CONF_PASSWORD]
 
-            client = ISecClient(host, port)
+            client = ISecClient(host, port) # Esto es una nueva instancia temporal
             try:
-                await self.hass.async_add_executor_job(client.connect)
+                await self.hass.async_add_executor_job(client.connect) # Usar el nuevo connect
                 await self.hass.async_add_executor_job(client.auth, password)
             except AuthError:
                 errors["base"] = "invalid_auth"
@@ -51,8 +50,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during config flow connection test")
                 errors["base"] = "unknown"
             finally:
-                if client.client:
-                    await self.hass.async_add_executor_job(client.close)
+                # Si client._socket existe (es decir, la conexión se estableció en algún momento), ciérralo.
+                # No es client.client, es client.close()
+                await self.hass.async_add_executor_job(client.close) 
 
             if not errors:
                 await self.async_set_unique_id(host)
