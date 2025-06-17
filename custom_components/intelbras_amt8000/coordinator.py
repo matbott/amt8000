@@ -1,11 +1,10 @@
-"""Coordinator for amt-8000 communication."""
-
-print("DEBUG: AmtCoordinator loaded")
+# Archivo: coordinator.py
 
 import logging
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime, timedelta
 
+from homeassistant.core import HomeAssistant # Importar HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import Client as ISecClient, CommunicationError, AuthError
@@ -13,16 +12,13 @@ from .const import DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
-_LOGGER.warning("DEBUG: Cargando AmtCoordinator desde intelbras_amt8000")
-
-
 class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     """Coordinate the amt status update for Home Assistant."""
 
-    def __init__(self, async_add_executor_job: Callable[..., Any], client: ISecClient, password: str) -> None:
+    def __init__(self, hass: HomeAssistant, async_add_executor_job: Callable[..., Any], client: ISecClient, password: str) -> None:
         """Initialize the coordinator."""
         super().__init__(
-            None,
+            hass, # <--- ¡CAMBIO CRÍTICO AQUÍ! Pasar la instancia de hass
             _LOGGER,
             name=DOMAIN,
             update_interval=SCAN_INTERVAL,
@@ -31,8 +27,8 @@ class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.client = client
         self.password = password
         self.paired_zones: Optional[Dict[str, bool]] = None
-        self._is_connected = False # Este flag controla si la autenticación ha sido exitosa
-
+        self._is_connected = False
+        
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch and process data from AMT-8000. This is the main update method."""
         _LOGGER.debug("Attempting to update coordinator data.")
