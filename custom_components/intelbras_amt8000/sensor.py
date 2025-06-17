@@ -19,6 +19,7 @@ from .const import (
     SENSOR_TYPE_TAMPER,
     SENSOR_TYPE_SIREN,
     SENSOR_TYPE_ZONES_CLOSED,
+    SENSOR_TYPE_ZONES_FIRING, # Añadir el nuevo tipo de sensor
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ async def async_setup_entry(
     entities.append(AmtTamperBinarySensor(coordinator, entry))
     entities.append(AmtSirenBinarySensor(coordinator, entry))
     entities.append(AmtAllZonesClosedBinarySensor(coordinator, entry))
+    entities.append(AmtZonesFiringBinarySensor(coordinator, entry)) # Añadir la nueva entidad para zonas disparadas
 
     if coordinator.paired_zones:
         _LOGGER.debug(f"Setting up binary sensors for paired zones: {coordinator.paired_zones.keys()}")
@@ -66,10 +68,11 @@ class AmtBaseSensor(CoordinatorEntity):
             identifiers={(DOMAIN, base_unique_id)},
             name=f"Intelbras AMT 8000 ({entry.data[CONF_HOST]})",
             manufacturer="Intelbras",
-            model=self.coordinator.data["general_status"].get("model", "AMT 8000"),
-            sw_version=self.coordinator.data["general_status"].get("version", "Unknown"),
+            model=self.coordinator.data["general_status"].get("model", "AMT 8000"), # Esto se actualiza desde el coordinador
+            sw_version=self.coordinator.data["general_status"].get("version", "Unknown"), # Esto se actualiza desde el coordinador
             configuration_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}"
         )
+
 
 class AmtBatterySensor(AmtBaseSensor, SensorEntity):
     """Representation of the battery status sensor."""
@@ -122,6 +125,10 @@ class AmtTamperBinarySensor(AmtBaseSensor, BinarySensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_is_on = self.coordinator.data["general_status"].get("tamper", False)
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
         self.async_write_ha_state()
 
 
@@ -139,6 +146,10 @@ class AmtSirenBinarySensor(AmtBaseSensor, BinarySensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_is_on = self.coordinator.data["general_status"].get("siren", False)
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
         self.async_write_ha_state()
 
 
@@ -156,6 +167,10 @@ class AmtZoneBinarySensor(AmtBaseSensor, BinarySensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_is_on = self.coordinator.data["zones"].get(self._sensor_id, "unknown") == "open"
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
         self.async_write_ha_state()
 
 
@@ -166,20 +181,50 @@ class AmtAllZonesClosedBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_CLOSED)
         self._attr_name = "Intelbras Alarm All Zones Closed"
-        self._attr_device_class = "window"
+        self._attr_device_class = "window" # Opcionalmente "safety" si representa un estado seguro
         self._attr_is_on = self._check_all_zones_closed()
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_is_on = self._check_all_zones_closed()
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
         self.async_write_ha_state()
 
     def _check_all_zones_closed(self) -> bool:
         """Check if all *paired* zones are in a 'closed' state."""
+        # Si no hay zonas emparejadas, consideramos que "todas las zonas están cerradas" es True
+        # o False dependiendo de la lógica que quieras. Para un estado de seguridad, True es más lógico.
+        if not self.coordinator.paired_zones:
+            return True
+
         for zone_id, status in self.coordinator.data["zones"].items():
-            if status == "open":
+            if zone_id in self.coordinator.paired_zones and status == "open":
                 _LOGGER.debug(f"Zone {zone_id} is open, so not all zones are closed.")
                 return False
         _LOGGER.debug("All paired zones are closed.")
         return True
+
+
+class AmtZonesFiringBinarySensor(AmtBaseSensor, BinarySensorEntity):
+    """Binary sensor indicating if any zone is currently firing (triggered)."""
+
+    def __init__(self, coordinator: AmtCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the zones firing sensor."""
+        super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_FIRING)
+        self._attr_name = "Intelbras Alarm Zones Firing"
+        self._attr_device_class = "safety" # O "problem"
+        self._attr_is_on = self.coordinator.data["general_status"].get("zonesFiring", False)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_is_on = self.coordinator.data["general_status"].get("zonesFiring", False)
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
+        self.async_write_ha_state()
