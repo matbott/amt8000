@@ -117,15 +117,24 @@ class AmtTamperBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the tamper sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_TAMPER)
         self._attr_name = "Intelbras Alarm Tamper"
-        self._attr_device_class = "problem" # Una tamper activada es un problema
-        self._attr_is_on = self.coordinator.data["general_status"].get("tamper", False)
-        self._attr_state_on = "Tamper Detectado" # <--- CAMBIO: Estado ON más descriptivo
-        self._attr_state_off = "Normal" # <--- CAMBIO: Estado OFF más descriptivo
+        self._attr_device_class = "problem"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the entity is on."""
+        return self.coordinator.data["general_status"].get("tamper", False)
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the binary sensor."""
+        if self.is_on:
+            return "Tamper Detectado"
+        return "Normal"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = self.coordinator.data["general_status"].get("tamper", False)
+        # No es necesario actualizar _attr_is_on aquí, ya que se usa la propiedad is_on
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
@@ -139,15 +148,23 @@ class AmtSirenBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the siren sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_SIREN)
         self._attr_name = "Intelbras Alarm Siren"
-        self._attr_device_class = "safety" # Una sirena activa es un estado de seguridad (alerta)
-        self._attr_is_on = self.coordinator.data["general_status"].get("siren", False)
-        self._attr_state_on = "Activa" # <--- CAMBIO: Estado ON más descriptivo
-        self._attr_state_off = "Inactiva" # <--- CAMBIO: Estado OFF más descriptivo
+        self._attr_device_class = "safety"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the entity is on."""
+        return self.coordinator.data["general_status"].get("siren", False)
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the binary sensor."""
+        if self.is_on:
+            return "Activa"
+        return "Inactiva"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = self.coordinator.data["general_status"].get("siren", False)
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
@@ -161,15 +178,23 @@ class AmtZoneBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the zone sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONE, zone_id)
         self._attr_name = f"Zone {zone_id}"
-        self._attr_device_class = "window" # Se mantiene "window" para zonas individuales
-        self._attr_is_on = self.coordinator.data["zones"].get(zone_id, "unknown") == "open"
-        self._attr_state_on = "Abierta" # <--- CAMBIO: Estado ON más descriptivo
-        self._attr_state_off = "Cerrada" # <--- CAMBIO: Estado OFF más descriptivo
+        self._attr_device_class = "window"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the entity is on."""
+        return self.coordinator.data["zones"].get(self._sensor_id, "unknown") == "open"
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the binary sensor."""
+        if self.is_on:
+            return "Abierta"
+        return "Cerrada"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = self.coordinator.data["zones"].get(self._sensor_id, "unknown") == "open"
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
@@ -183,15 +208,23 @@ class AmtAllZonesClosedBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_CLOSED)
         self._attr_name = "Intelbras Alarm All Zones Closed"
-        self._attr_device_class = "safety" # Ya se cambió a "safety"
-        self._attr_is_on = self._check_all_zones_closed()
-        self._attr_state_on = "Todas Cerradas" # <--- CAMBIO: Estado ON más descriptivo
-        self._attr_state_off = "Algunas Abiertas" # <--- CAMBIO: Estado OFF más descriptivo
+        self._attr_device_class = "safety"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the entity is on."""
+        return self._check_all_zones_closed()
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the binary sensor."""
+        if self.is_on:
+            return "Todas Cerradas"
+        return "Algunas Abiertas"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = self._check_all_zones_closed()
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
@@ -217,15 +250,23 @@ class AmtZonesFiringBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the zones firing sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_FIRING)
         self._attr_name = "Intelbras Alarm Zones Firing"
-        self._attr_device_class = "safety" # Se mantiene "safety"
-        self._attr_is_on = self.coordinator.data["general_status"].get("zonesFiring", False)
-        self._attr_state_on = "Disparado" # <--- CAMBIO: Estado ON más descriptivo
-        self._attr_state_off = "Normal" # <--- CAMBIO: Estado OFF más descriptivo
+        self._attr_device_class = "safety"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if the entity is on."""
+        return self.coordinator.data["general_status"].get("zonesFiring", False)
+
+    @property
+    def state(self) -> str | None:
+        """Return the state of the binary sensor."""
+        if self.is_on:
+            return "Disparado"
+        return "Normal"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_is_on = self.coordinator.data["general_status"].get("zonesFiring", False)
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
