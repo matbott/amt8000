@@ -1,0 +1,12 @@
+{
+  "domain": "amt8000",
+  "name": "AMT-8000",
+  "codeowners": ["@matbott"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "issue_tracker": "",
+  "version": "0.0.1"
+}
