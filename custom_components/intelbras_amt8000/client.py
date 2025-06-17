@@ -6,7 +6,7 @@ from typing import Dict, Any # Import for type hinting
 
 LOGGER = logging.getLogger(__name__)
 
-timeout = 2  # Set the timeout to 2 seconds
+timeout = 2
 
 dst_id = [0x00, 0x00]
 our_id = [0x8F, 0xFF]
