@@ -71,7 +71,6 @@ class AmtBaseSensor(CoordinatorEntity):
             configuration_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}"
         )
 
-
 class AmtBatterySensor(AmtBaseSensor, SensorEntity):
     """Representation of the battery status sensor."""
 
@@ -79,15 +78,35 @@ class AmtBatterySensor(AmtBaseSensor, SensorEntity):
         """Initialize the battery sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_BATTERY)
         self._attr_name = "Intelbras Alarm Battery Status"
-        self._attr_device_class = "battery"
-        self._attr_native_value = self.coordinator.data["general_status"].get("batteryStatus", "unknown")
+        self._attr_device_class = "battery" # Mantener la clase de dispositivo
+        self._attr_unit_of_measurement = "%" # Añadir unidad de medida para porcentaje
+        self._attr_native_value = self._map_battery_status_to_percentage(
+            self.coordinator.data["general_status"].get("batteryStatus", "unknown")
+        )
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._attr_native_value = self.coordinator.data["general_status"].get("batteryStatus", "unknown")
+        self._attr_native_value = self._map_battery_status_to_percentage(
+            self.coordinator.data["general_status"].get("batteryStatus", "unknown")
+        )
+        # Actualizar DeviceInfo para que modelo y versión se vean en la UI
+        if self._attr_device_info:
+            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
         self.async_write_ha_state()
 
+    def _map_battery_status_to_percentage(self, status: str) -> int | None:
+        """Map string battery status to a percentage."""
+        if status == "full":
+            return 100
+        elif status == "middle":
+            return 75
+        elif status == "low":
+            return 25
+        elif status == "dead":
+            return 0
+        return None # Retorna None si es "unknown" o un valor no reconocido
 
 class AmtTamperBinarySensor(AmtBaseSensor, BinarySensorEntity):
     """Representation of the tamper binary sensor."""
