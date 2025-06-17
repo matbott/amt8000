@@ -4,14 +4,7 @@ import logging
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    STATE_ON,
-    STATE_OFF,
-    DEVICE_CLASS_BATTERY,
-    DEVICE_CLASS_PROBLEM,
-    DEVICE_CLASS_SAFETY,
-    DEVICE_CLASS_WINDOW,
-)
+from homeassistant.const import STATE_ON, STATE_OFF
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -30,6 +23,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
 ) -> None:
@@ -38,11 +32,8 @@ async def async_setup_entry(
     entities = []
 
     entities.append(AmtBatterySensor(coordinator, entry))
-
     entities.append(AmtTamperBinarySensor(coordinator, entry))
-
     entities.append(AmtSirenBinarySensor(coordinator, entry))
-
     entities.append(AmtAllZonesClosedBinarySensor(coordinator, entry))
 
     if coordinator.paired_zones:
@@ -88,7 +79,7 @@ class AmtBatterySensor(AmtBaseSensor, SensorEntity):
         """Initialize the battery sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_BATTERY)
         self._attr_name = "Intelbras Alarm Battery Status"
-        self._attr_device_class = DEVICE_CLASS_BATTERY
+        self._attr_device_class = "battery"
         self._attr_native_value = self.coordinator.data["general_status"].get("batteryStatus", "unknown")
 
     @callback
@@ -105,7 +96,7 @@ class AmtTamperBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the tamper sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_TAMPER)
         self._attr_name = "Intelbras Alarm Tamper"
-        self._attr_device_class = DEVICE_CLASS_PROBLEM
+        self._attr_device_class = "problem"
         self._attr_is_on = self.coordinator.data["general_status"].get("tamper", False)
 
     @callback
@@ -122,7 +113,7 @@ class AmtSirenBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the siren sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_SIREN)
         self._attr_name = "Intelbras Alarm Siren"
-        self._attr_device_class = DEVICE_CLASS_SAFETY
+        self._attr_device_class = "safety"
         self._attr_is_on = self.coordinator.data["general_status"].get("siren", False)
 
     @callback
@@ -139,7 +130,7 @@ class AmtZoneBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the zone sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONE, zone_id)
         self._attr_name = f"Zone {zone_id}"
-        self._attr_device_class = DEVICE_CLASS_WINDOW
+        self._attr_device_class = "window"
         self._attr_is_on = self.coordinator.data["zones"].get(zone_id, "unknown") == "open"
 
     @callback
@@ -156,7 +147,7 @@ class AmtAllZonesClosedBinarySensor(AmtBaseSensor, BinarySensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_CLOSED)
         self._attr_name = "Intelbras Alarm All Zones Closed"
-        self._attr_device_class = DEVICE_CLASS_WINDOW
+        self._attr_device_class = "window"
         self._attr_is_on = self._check_all_zones_closed()
 
     @callback
