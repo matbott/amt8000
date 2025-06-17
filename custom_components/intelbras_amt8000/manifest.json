@@ -1,5 +1,5 @@
 {
-  "domain": "intelbras_amt8000",
+  "domain": "amt8000",
   "name": "Intelbras AMT 8000",
   "codeowners": ["@matbott"],
   "config_flow": true,
