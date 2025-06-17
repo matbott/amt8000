@@ -22,10 +22,11 @@ DATA_SCHEMA = vol.Schema(
     }
 )
 
-# ... (imports existentes) ...
-
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    # ... (VERSION y CONNECTION_CLASS) ...
+    """Handle a config flow for Intelbras AMT 8000."""
+
+    VERSION = 1
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -50,9 +51,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during config flow connection test")
                 errors["base"] = "unknown"
             finally:
-                # Si client._socket existe (es decir, la conexión se estableció en algún momento), ciérralo.
-                # No es client.client, es client.close()
-                await self.hass.async_add_executor_job(client.close) 
+                # Asegurarse de cerrar la conexión temporal utilizada para la prueba
+                await self.hass.async_add_executor_job(client.close)
 
             if not errors:
                 await self.async_set_unique_id(host)
