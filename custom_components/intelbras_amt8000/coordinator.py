@@ -15,35 +15,28 @@ _LOGGER = logging.getLogger(__name__)
 
 _LOGGER.warning("DEBUG: Cargando AmtCoordinator desde intelbras_amt8000")
 
+# ... (imports existentes) ...
 
 class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
-    """Coordinate the amt status update for Home Assistant."""
+    # ... (código existente del __init__) ...
 
-    def __init__(self, async_add_executor_job: Callable[..., Any], client: ISecClient, password: str) -> None:
-        """Initialize the coordinator."""
-        super().__init__(
-            None,
-            _LOGGER,
-            name=DOMAIN,
-            update_interval=SCAN_INTERVAL,
-        )
-        self.async_add_executor_job = async_add_executor_job
-        self.client = client
-        self.password = password
-        self.paired_zones: Optional[Dict[str, bool]] = None
-        self._is_connected = False
-
-    async def _async_update_data(self) -> Dict[str, Any]: # <-- ¡ESTE ES EL CAMBIO CRÍTICO, EL GUION BAJO!
+    async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch and process data from AMT-8000. This is the main update method."""
         _LOGGER.debug("Attempting to update coordinator data.")
 
         try:
-            if not self._is_connected:
-                _LOGGER.debug("Client not connected, attempting to connect and authenticate.")
-                await self.async_add_executor_job(self.client.connect)
+            # Aseguramos la conexión antes de cualquier comando.
+            # La lógica de 'connect' del cliente ahora es persistente.
+            # Se intentará conectar si no hay conexión activa, o simplemente no hará nada si ya está conectado.
+            await self.async_add_executor_job(self.client.connect) 
+            
+            # Autenticar solo si no estamos conectados o si la autenticación falló previamente
+            # La bandera _is_connected del coordinador controla el estado de autenticación.
+            if not self._is_connected: 
+                _LOGGER.debug("Client not authenticated, attempting authentication.")
                 await self.async_add_executor_job(self.client.auth, self.password)
                 self._is_connected = True
-                _LOGGER.info("Connection and authentication successful.")
+                _LOGGER.info("Authentication successful.")
 
             if self.paired_zones is None:
                 _LOGGER.debug("Fetching paired sensors for the first time or retrying...")
@@ -57,27 +50,23 @@ class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             status_from_client = await self.async_add_executor_job(self.client.status)
             _LOGGER.debug(f"AMT-8000 raw status from client (all 64 zones): {status_from_client.get('zones')}")
 
-            processed_data = {
-                "general_status": {
-                    "model": status_from_client.get("model", "N/A"),
-                    "version": status_from_client.get("version", "N/A"),
-                    "status": status_from_client.get("status", "unknown"),
-                    "siren": status_from_client.get("siren", False),
-                    "zonesFiring": status_from_client.get("zonesFiring", False),
-                    "zonesClosed": status_from_client.get("zonesClosed", False),
-                    "batteryStatus": status_from_client.get("batteryStatus", "unknown"),
-                    "tamper": status_from_client.get("tamper", False),
-                },
-                "zones": {},
-            }
+            # ... (resto de la lógica de procesamiento de datos) ...
 
-            if isinstance(self.paired_zones, dict) and isinstance(status_from_client.get("zones"), dict):
-                for zone_id_str, is_paired in self.paired_zones.items():
-                    if is_paired:
-                        zone_status = status_from_client["zones"].get(zone_id_str, "unknown")
-                        processed_data["zones"][zone_id_str] = zone_status
-            else:
-                _LOGGER.warning("Datos de zonas emparejadas o estado de zonas del cliente no son diccionarios válidos. No se filtrarán las zonas.")
+            _LOGGER.debug("Decoded status for coordinator.data: %s", processed_data)
+            return processed_data
+
+        except (CommunicationError, AuthError) as err:
+            _LOGGER.error("Error de comunicación o autenticación con AMT-8000: %s", err)
+            self._is_connected = False # Marcar como desconectado en caso de error de comunicación/autenticación
+            raise UpdateFailed(f"Error communicating with AMT-8000: {err}") from err
+        except Exception as err:
+            _LOGGER.error("Ocurrió un error inesperado al obtener datos AMT-8000: %s", err, exc_info=True)
+            self._is_connected = False # Marcar como desconectado también para errores inesperados
+            raise UpdateFailed(f"Unknown error updating data: {err}") from err
+        finally:
+            # En esta implementación, el finally no necesita cerrar la conexión,
+            # ya que el cliente ahora gestiona una conexión persistente.
+            pass
 
             _LOGGER.debug("Decoded status for coordinator.data: %s", processed_data)
             return processed_data
