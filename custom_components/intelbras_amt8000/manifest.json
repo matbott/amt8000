@@ -1,6 +1,6 @@
 {
-  "domain": "amt8000",
-  "name": "AMT-8000",
+  "domain": "intelbras_amt8000",  // <-- CAMBIO AQUÍ
+  "name": "Intelbras AMT 8000",  // <-- SUGERENCIA DE CAMBIO AQUÍ PARA COINCIDIR
   "codeowners": ["@matbott"],
   "config_flow": true,
   "dependencies": [],
