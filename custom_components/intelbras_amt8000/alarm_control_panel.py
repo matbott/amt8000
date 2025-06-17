@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import CommunicationError
+from .client import CommunicationError, MAX_ZONES # <--- ¡IMPORTAR MAX_ZONES!
 from .coordinator import AmtCoordinator
 from .const import (
     DOMAIN,
@@ -45,6 +45,7 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
     def __init__(self, coordinator: AmtCoordinator, entry: ConfigEntry) -> None:
         """Initialize the alarm control panel."""
         super().__init__(coordinator)
+        self._entry = entry # Guardar la entrada para acceso futuro
         self._attr_name = f"Intelbras AMT 8000 ({entry.data[CONF_HOST]})"
         self._attr_unique_id = entry.entry_id
         self._attr_code_format = CodeFormat.NUMBER
@@ -57,13 +58,17 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         )
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self.unique_id)},
+            identifiers={(DOMAIN, self._attr_unique_id)},
             name=self.name,
             manufacturer="Intelbras",
             model=self.coordinator.data["general_status"].get("model", "AMT 8000"),
             sw_version=self.coordinator.data["general_status"].get("version", "Unknown"),
             configuration_url=f"http://{entry.data[CONF_HOST]}:{entry.data[CONF_PORT]}"
         )
+        
+        self._attr_extra_state_attributes = {} 
+        # Cargar la cantidad total de zonas como un atributo estático inicial
+        self._attr_extra_state_attributes["total_zones"] = MAX_ZONES # <--- ¡NUEVO ATRIBUTO!
         self._update_state_from_coordinator_data()
 
     @callback
@@ -73,7 +78,7 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         self.async_write_ha_state()
 
     def _update_state_from_coordinator_data(self) -> None:
-        """Update the alarm panel state from coordinator data."""
+        """Update the alarm panel state and attributes from coordinator data."""
         panel_status = self.coordinator.data["general_status"].get("status")
 
         if panel_status == ALARM_STATE_DISARMED:
@@ -87,6 +92,14 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         else:
             self._attr_state = STATE_UNKNOWN
         _LOGGER.debug(f"Alarm panel state updated to: {self._attr_state}")
+
+        # Actualizar atributos extra del estado
+        self._attr_extra_state_attributes["firmware_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
+        self._attr_extra_state_attributes["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
+        self._attr_extra_state_attributes["host"] = self._entry.data[CONF_HOST]
+        self._attr_extra_state_attributes["port"] = self._entry.data[CONF_PORT]
+        # total_zones ya fue cargado en __init__, es estático. No necesita actualización aquí.
+
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Arm alarm in away mode."""
