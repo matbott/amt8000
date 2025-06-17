@@ -15,7 +15,7 @@ commands = {
     "status": [0x0B, 0x4A],
     "arm_disarm": [0x40, 0x1e],
     "panic": [0x40, 0x1a],
-    "paired_sensors": [0x0B, 0x01] # Mantener este comando
+    "paired_sensors": [0x0B, 0x01]
 }
 
 # Constantes para el procesamiento de zonas (offset de la versión que funciona)
@@ -46,7 +46,6 @@ def merge_octets(buf):
 
 def battery_status_for(resp):
     """Retrieve the battery status."""
-    # El payload debe tener al menos 135 bytes para que el índice 134 sea válido
     if len(resp) <= 134:
         LOGGER.debug("Payload too short for battery status. Length: %d", len(resp))
         return "unknown"
@@ -64,7 +63,6 @@ def battery_status_for(resp):
 
 def get_status(payload):
     """Retrieve the current status from a given array of bytes."""
-    # El payload debe tener al menos 21 bytes para que el índice 20 sea válido
     if len(payload) <= 20:
         LOGGER.debug("Payload too short for general status. Length: %d", len(payload))
         return "unknown"
@@ -87,7 +85,7 @@ def get_zones_status_from_payload(payload: bytearray, num_zones: int = MAX_ZONES
     """
     zones_status_dict = {}
     
-    required_bytes_for_zones = (num_zones + 7) // 8 # Round up for bytes
+    required_bytes_for_zones = (num_zones + 7) // 8
     
     if len(payload) < ZONE_STATUS_PAYLOAD_OFFSET + required_bytes_for_zones:
         LOGGER.warning(f"Payload too short to decode all {num_zones} zones from offset {ZONE_STATUS_PAYLOAD_OFFSET}. Required at least {ZONE_STATUS_PAYLOAD_OFFSET + required_bytes_for_zones} bytes, got {len(payload)}.")
@@ -99,8 +97,7 @@ def get_zones_status_from_payload(payload: bytearray, num_zones: int = MAX_ZONES
     for byte_val in bytes_to_process:
         for bit_index in range(8):
             if zone_current_idx < num_zones:
-                zone_number = zone_current_idx + 1 # Zones are 1-indexed
-                # If the bit is 1, the zone is open/faulted. If 0, it's closed.
+                zone_number = zone_current_idx + 1
                 is_open = bool(byte_val & (1 << bit_index))
                 zones_status_dict[str(zone_number)] = "open" if is_open else "closed"
                 zone_current_idx += 1
@@ -126,7 +123,7 @@ def build_status(data: bytearray) -> Dict[str, Any]:
             "siren": False,
             "batteryStatus": "unknown",
             "tamper": False,
-            "zones": {} # Changed to dict to match get_zones_status_from_payload
+            "zones": {}
         }
 
     length_bytes = data[4:6]
@@ -185,7 +182,6 @@ def build_status(data: bytearray) -> Dict[str, Any]:
     else:
         LOGGER.debug("Payload too short for tamper status. Length: %d", len(payload))
 
-    # Integrate the working zone decoding logic
     status_data["zones"] = get_zones_status_from_payload(payload)
 
     LOGGER.debug("Decoded status: %s", status_data)
@@ -219,46 +215,42 @@ class Client:
         self.port = port
         self.device_type = device_type
         self.software_version = software_version
-        self.client = None
+        self._socket = None # Use a private attribute for the actual socket
 
-    def close(self):
-        """Close a connection."""
-        if self.client is None:
-            LOGGER.warning("Attempted to close a non-existent client connection.")
-            return
+    # Removed the connect/close logic from here and moved it into specific command methods
+    # to ensure each command gets a fresh, isolated connection.
 
+    def _send_command_and_receive_response(self, data_to_send: bytes) -> bytearray:
+        """Helper to send a command and receive its response, managing connection per call."""
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.settimeout(timeout)
+        LOGGER.debug("Attempting connection for command to %s:%d", self.host, self.port)
         try:
-            self.client.shutdown(socket.SHUT_RDWR)
-            self.client.close()
-        except OSError as e:
-            LOGGER.debug("Error closing socket: %s", e)
-        finally:
-            self.client = None
-
-    def connect(self):
-        """Create a new connection."""
-        if self.client:
-            self.close() # Cierra la conexión existente antes de intentar una nueva
-
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.settimeout(timeout)
-        LOGGER.debug("Connecting to %s:%d", self.host, self.port)
-        try:
-            self.client.connect((self.host, self.port))
-            LOGGER.debug("Connection established.")
-        except socket.timeout:
-            raise CommunicationError(f"Connection timed out to {self.host}:{self.port}")
+            self._socket.connect((self.host, self.port))
+            LOGGER.debug("Connection established for command.")
+            self._socket.send(data_to_send)
+            return_data = bytearray(self._socket.recv(1024))
+            LOGGER.debug("Received response for command: %s", return_data.hex())
+            return return_data
+        except socket.timeout as e:
+            raise CommunicationError(f"Command response timed out: {e}")
         except ConnectionRefusedError:
             raise CommunicationError(f"Connection refused by {self.host}:{self.port}")
         except OSError as e:
-            raise CommunicationError(f"OS error connecting to {self.host}:{self.port}: {e}")
+            raise CommunicationError(f"OS error during command communication: {e}")
+        finally:
+            if self._socket:
+                try:
+                    self._socket.shutdown(socket.SHUT_RDWR)
+                    self._socket.close()
+                    LOGGER.debug("Connection closed after command.")
+                except OSError as e:
+                    LOGGER.debug("Error closing socket after command: %s", e)
+                finally:
+                    self._socket = None # Ensure socket is cleared
 
     def auth(self, password):
-        """Create a authentication for the current connection."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect first.")
-
-        # Aseguramos que password sea una cadena de texto antes de procesar
+        """Create an authentication for the current connection."""
         if not isinstance(password, str):
             LOGGER.error(f"Password provided to auth() is not a string. Type: {type(password)}, Value: {password}")
             raise CommunicationError("Password must be a string of 6 digits.")
@@ -287,15 +279,7 @@ class Client:
         payload = bytes(data + [cs])
 
         LOGGER.debug("Sending authentication: %s", payload.hex())
-        try:
-            self.client.send(payload)
-            return_data = bytearray(self.client.recv(1024))
-        except socket.timeout:
-            raise CommunicationError("Authentication response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during authentication: {e}")
-
-        LOGGER.debug("Raw authentication response: %s", return_data.hex())
+        return_data = self._send_command_and_receive_response(payload)
 
         if len(return_data) < 9:
             raise CommunicationError(f"Authentication response too short. Length: {len(return_data)}. Raw: {return_data.hex()}")
@@ -317,50 +301,30 @@ class Client:
 
     def status(self):
         """Return the current status."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect first.")
-
         length = [0x00, 0x02]
         status_data = dst_id + our_id + length + commands["status"]
         cs = calculate_checksum(status_data)
         payload = bytes(status_data + [cs])
 
         LOGGER.debug("Sending status command: %s", payload.hex())
-        try:
-            self.client.send(payload)
-            return_data = bytearray(self.client.recv(1024))
-        except socket.timeout:
-            raise CommunicationError("Status command response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during status command: {e}")
-
-        LOGGER.debug("Raw status response (full): %s", return_data.hex())
+        return_data = self._send_command_and_receive_response(payload)
+        
         status = build_status(return_data)
         return status
 
     def arm_system(self, partition):
         """Arm the system for a given partition."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect first.")
-
         if partition == 0:
             partition = 0xFF
 
         length = [0x00, 0x04]
-        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x01 ]
+        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x01 ] # 0x01 for arm
         cs = calculate_checksum(arm_data)
         payload = bytes(arm_data + [cs])
 
         LOGGER.debug("Sending arm command: %s", payload.hex())
-        try:
-            self.client.send(payload)
-            return_data = bytearray(self.client.recv(1024))
-        except socket.timeout:
-            raise CommunicationError("Arm command response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during arm command: {e}")
-
-        LOGGER.debug("Raw arm response: %s", return_data.hex())
+        return_data = self._send_command_and_receive_response(payload)
+        
         if len(return_data) > 8 and return_data[8] == 0x91:
             LOGGER.info("System armed successfully.")
             return 'armed'
@@ -370,27 +334,17 @@ class Client:
 
     def disarm_system(self, partition):
         """Disarm the system for a given partition."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect first.")
-
         if partition == 0:
             partition = 0xFF
 
         length = [0x00, 0x04]
-        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x00 ] # 0x00 for disarm
-        cs = calculate_checksum(arm_data)
-        payload = bytes(arm_data + [cs])
+        disarm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x00 ] # 0x00 for disarm
+        cs = calculate_checksum(disarm_data)
+        payload = bytes(disarm_data + [cs])
 
         LOGGER.debug("Sending disarm command: %s", payload.hex())
-        try:
-            self.client.send(payload)
-            return_data = bytearray(self.client.recv(1024))
-        except socket.timeout:
-            raise CommunicationError("Disarm command response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during disarm command: {e}")
-
-        LOGGER.debug("Raw disarm response: %s", return_data.hex())
+        return_data = self._send_command_and_receive_response(payload)
+        
         if len(return_data) > 8 and return_data[8] == 0x91:
             LOGGER.info("System disarmed successfully.")
             return 'disarmed'
@@ -400,24 +354,14 @@ class Client:
 
     def panic(self, panic_type):
         """Trigger a panic alarm."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect first.")
-
         length = [0x00, 0x03]
         panic_data = dst_id + our_id + length + commands["panic"] +[ panic_type ]
         cs = calculate_checksum(panic_data)
         payload = bytes(panic_data + [cs])
 
         LOGGER.debug("Sending panic command: %s", payload.hex())
-        try:
-            self.client.send(payload)
-            return_data = bytearray(self.client.recv(1024))
-        except socket.timeout:
-            raise CommunicationError("Panic command response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during panic command: {e}")
-
-        LOGGER.debug("Raw panic response: %s", return_data.hex())
+        return_data = self._send_command_and_receive_response(payload)
+        
         if len(return_data) > 7 and return_data[7] == 0xfe:
             LOGGER.info("Panic alarm triggered.")
             return 'triggered'
@@ -427,25 +371,13 @@ class Client:
     
     def get_paired_sensors(self) -> Dict[str, bool]:
         """Get the list of paired sensors from the alarm panel."""
-        if self.client is None:
-            raise CommunicationError("Client not connected. Call Client.connect")
-
         length = [0x00, 0x02] # Command is 2 bytes
         sensors_data = dst_id + our_id + length + commands["paired_sensors"]
         cs = calculate_checksum(sensors_data)
         payload = bytes(sensors_data + [cs])
 
         LOGGER.debug("Sending paired sensors command: %s", payload.hex())
-        return_data = bytearray()
-        try:
-            self.client.send(payload)
-            data = self.client.recv(1024) # Read the response
-            return_data.extend(data)
-            LOGGER.debug("Raw paired sensors response: %s", return_data.hex())
-        except socket.timeout:
-            raise CommunicationError("Paired sensors command response timed out.")
-        except OSError as e:
-            raise CommunicationError(f"OS error during paired sensors command: {e}")
+        return_data = self._send_command_and_receive_response(payload)
 
         # Check for error response first (0xfd at index 8, if panel sends it)
         if len(return_data) > 8 and return_data[8] == 0xfd:
