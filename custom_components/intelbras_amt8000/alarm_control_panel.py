@@ -103,6 +103,9 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to arm system away.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while arming away: %s", e)
+            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
+            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Arm alarm in home (partial) mode."""
@@ -119,6 +122,9 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to arm system home.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while arming home: %s", e)
+            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
+            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm alarm."""
@@ -135,6 +141,8 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to disarm system.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while disarming: %s", e)
+            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
+            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger panic alarm."""
@@ -148,3 +156,5 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to trigger panic alarm.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while triggering panic: %s", e)
+            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
+            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
