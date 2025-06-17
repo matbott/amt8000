@@ -13,6 +13,9 @@ from .const import DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
+_LOGGER.warning("DEBUG: Cargando AmtCoordinator desde intelbras_amt8000")
+
+
 class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     """Coordinate the amt status update for Home Assistant."""
 
