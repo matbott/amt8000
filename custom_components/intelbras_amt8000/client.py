@@ -2,7 +2,7 @@
 
 import socket
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -15,11 +15,11 @@ commands = {
     "status": [0x0B, 0x4A],
     "arm_disarm": [0x40, 0x1e],
     "panic": [0x40, 0x1a],
-    "paired_sensors": [0x0B, 0x01]
+    "paired_sensors": [0x0B, 0x01] # Mantener este comando
 }
 
-# Constantes para el procesamiento de zonas
-ZONE_PAYLOAD_OFFSET = 64  # The first zone byte within the payload (from the fork)
+# Constantes para el procesamiento de zonas (offset de la versión que funciona)
+ZONE_STATUS_PAYLOAD_OFFSET = 22 # The first zone byte within the payload (from the working fork)
 MAX_ZONES = 64 # Maximum number of zones that can be read (8 bytes * 8 bits)
 
 def split_into_octets(n):
@@ -78,6 +78,41 @@ def get_status(payload):
     LOGGER.debug("Unknown arming status code: 0x%02x", status)
     return "unknown"
 
+def get_zones_status_from_payload(payload: bytearray, num_zones: int = MAX_ZONES) -> Dict[str, str]:
+    """
+    Decodes the zone status from the payload.
+    The zone status bytes start at ZONE_STATUS_PAYLOAD_OFFSET (22) in the status payload.
+    Each bit represents a zone (0 = closed, 1 = open/faulted).
+    Returns a dictionary of zone_id (str) to "open" or "closed".
+    """
+    zones_status_dict = {}
+    
+    required_bytes_for_zones = (num_zones + 7) // 8 # Round up for bytes
+    
+    if len(payload) < ZONE_STATUS_PAYLOAD_OFFSET + required_bytes_for_zones:
+        LOGGER.warning(f"Payload too short to decode all {num_zones} zones from offset {ZONE_STATUS_PAYLOAD_OFFSET}. Required at least {ZONE_STATUS_PAYLOAD_OFFSET + required_bytes_for_zones} bytes, got {len(payload)}.")
+        bytes_to_process = payload[ZONE_STATUS_PAYLOAD_OFFSET:]
+    else:
+        bytes_to_process = payload[ZONE_STATUS_PAYLOAD_OFFSET : ZONE_STATUS_PAYLOAD_OFFSET + required_bytes_for_zones]
+
+    zone_current_idx = 0
+    for byte_val in bytes_to_process:
+        for bit_index in range(8):
+            if zone_current_idx < num_zones:
+                zone_number = zone_current_idx + 1 # Zones are 1-indexed
+                # If the bit is 1, the zone is open/faulted. If 0, it's closed.
+                is_open = bool(byte_val & (1 << bit_index))
+                zones_status_dict[str(zone_number)] = "open" if is_open else "closed"
+                zone_current_idx += 1
+            else:
+                break
+        if zone_current_idx >= num_zones:
+            break
+
+    LOGGER.debug(f"Decoded zones status: {zones_status_dict}")
+    return zones_status_dict
+
+
 def build_status(data: bytearray) -> Dict[str, Any]:
     """Build the amt-8000 status from a given array of bytes, including zone status."""
     if len(data) < 8:
@@ -91,10 +126,9 @@ def build_status(data: bytearray) -> Dict[str, Any]:
             "siren": False,
             "batteryStatus": "unknown",
             "tamper": False,
-            "zones": {}
+            "zones": {} # Changed to dict to match get_zones_status_from_payload
         }
 
-    # El campo de longitud del paquete se encuentra en los bytes 4 y 5
     length_bytes = data[4:6]
     if len(length_bytes) < 2:
         LOGGER.error("Length bytes are missing or insufficient in status data. Data: %s", data.hex())
@@ -115,7 +149,7 @@ def build_status(data: bytearray) -> Dict[str, Any]:
     if len(data) < 8 + expected_payload_length:
         LOGGER.warning("Received data is shorter than indicated length. Expected: %d, Received: %d. Data: %s",
                         8 + expected_payload_length, len(data), data.hex())
-        payload = data[8:] # Tomamos lo que esté disponible
+        payload = data[8:]
     else:
         payload = data[8 : 8 + expected_payload_length]
 
@@ -123,17 +157,14 @@ def build_status(data: bytearray) -> Dict[str, Any]:
 
     status_data = {}
 
-    # Decodificación del modelo
     status_data["model"] = "Unknown"
     if len(payload) > 0:
         status_data["model"] = "AMT-8000" if payload[0] == 1 else "Unknown"
 
-    # Decodificación de la versión
     status_data["version"] = "Unknown"
     if len(payload) > 3:
         status_data["version"] = f"{payload[1]}.{payload[2]}.{payload[3]}"
     
-    # Decodificación del estado general y bits de zonas/sirena
     status_data["status"] = "unknown"
     status_data["zonesFiring"] = False
     status_data["zonesClosed"] = False
@@ -146,35 +177,16 @@ def build_status(data: bytearray) -> Dict[str, Any]:
     else:
         LOGGER.debug("Payload too short for full status bits. Length: %d", len(payload))
 
-    # Decodificación del estado de la batería
-    status_data["batteryStatus"] = battery_status_for(payload) # Use payload here
+    status_data["batteryStatus"] = battery_status_for(payload)
 
-    # Decodificación del tamper
     status_data["tamper"] = False
     if len(payload) > 71:
         status_data["tamper"] = (payload[71] & (1 << 0x01)) > 0
     else:
         LOGGER.debug("Payload too short for tamper status. Length: %d", len(payload))
 
-    # ADDED: Individual zone status processing
-    zones = {}
-    zones_data_start_payload_index = ZONE_PAYLOAD_OFFSET # This is 64 in the payload
-    for byte_index in range(8): # Assuming 8 bytes for 64 zones
-        current_byte_index = zones_data_start_payload_index + byte_index
-        if current_byte_index < len(payload): # Ensure we don't go out of bounds
-            byte_value = payload[current_byte_index]
-            for bit in range(8):
-                zone_number = (byte_index * 8) + bit + 1
-                # LÓGICA DE INTERPRETACIÓN DE BITS:
-                # Se asume que un BIT '1' significa que la zona está ABIERTA/VIOLADA
-                # y un BIT '0' significa que está CERRADA/NORMAL.
-                is_zone_open_according_to_protocol = (byte_value & (1 << bit)) != 0
-                zones[str(zone_number)] = "open" if is_zone_open_according_to_protocol else "closed"
-        else:
-            LOGGER.warning(f"Datos de zonas incompletos a partir del byte {current_byte_index} del payload.")
-            break # Exit if no more data
-
-    status_data["zones"] = zones # Add individual zone states
+    # Integrate the working zone decoding logic
+    status_data["zones"] = get_zones_status_from_payload(payload)
 
     LOGGER.debug("Decoded status: %s", status_data)
     return status_data
@@ -316,7 +328,6 @@ class Client:
         LOGGER.debug("Sending status command: %s", payload.hex())
         try:
             self.client.send(payload)
-            # Recibe toda la respuesta esperada en una sola llamada
             return_data = bytearray(self.client.recv(1024))
         except socket.timeout:
             raise CommunicationError("Status command response timed out.")
@@ -332,12 +343,11 @@ class Client:
         if self.client is None:
             raise CommunicationError("Client not connected. Call Client.connect first.")
 
-        # La integración original usa 0xFF para partition 0 (master)
         if partition == 0:
             partition = 0xFF
 
         length = [0x00, 0x04]
-        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x01 ] # 0x01 for arm
+        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x01 ]
         cs = calculate_checksum(arm_data)
         payload = bytes(arm_data + [cs])
 
@@ -351,7 +361,6 @@ class Client:
             raise CommunicationError(f"OS error during arm command: {e}")
 
         LOGGER.debug("Raw arm response: %s", return_data.hex())
-        # La integración original verifica el byte 8 para 0x91
         if len(return_data) > 8 and return_data[8] == 0x91:
             LOGGER.info("System armed successfully.")
             return 'armed'
@@ -368,9 +377,9 @@ class Client:
             partition = 0xFF
 
         length = [0x00, 0x04]
-        disarm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x00 ] # 0x00 for disarm
-        cs = calculate_checksum(disarm_data)
-        payload = bytes(disarm_data + [cs])
+        arm_data = dst_id + our_id + length + commands["arm_disarm"] + [ partition, 0x00 ] # 0x00 for disarm
+        cs = calculate_checksum(arm_data)
+        payload = bytes(arm_data + [cs])
 
         LOGGER.debug("Sending disarm command: %s", payload.hex())
         try:
@@ -409,7 +418,6 @@ class Client:
             raise CommunicationError(f"OS error during panic command: {e}")
 
         LOGGER.debug("Raw panic response: %s", return_data.hex())
-        # La integración original verifica el byte 7 para 0xfe
         if len(return_data) > 7 and return_data[7] == 0xfe:
             LOGGER.info("Panic alarm triggered.")
             return 'triggered'
@@ -417,7 +425,6 @@ class Client:
         LOGGER.warning("Panic command failed. Response: %s", return_data.hex())
         return 'not_triggered'
     
-    # ADDED: Method to get paired sensors
     def get_paired_sensors(self) -> Dict[str, bool]:
         """Get the list of paired sensors from the alarm panel."""
         if self.client is None:
