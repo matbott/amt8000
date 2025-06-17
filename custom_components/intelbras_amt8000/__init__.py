@@ -35,6 +35,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("Performing initial data fetch for coordinator.")
     try:
+        # Intenta la primera conexión y autenticación
+        await coordinator.async_add_executor_job(coordinator.client.connect)
+        await coordinator.async_add_executor_job(coordinator.client.auth, coordinator.password)
+        coordinator._is_connected = True # Marcar como conectado después de la autenticación inicial
+        _LOGGER.info("Initial connection and authentication successful for AMT-8000.")
+
         await coordinator.async_config_entry_first_refresh()
     except (CommunicationError, AuthError) as ex:
         _LOGGER.error("Failed to connect or authenticate to AMT-8000 panel: %s", ex)
@@ -59,6 +65,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
         if coordinator.client:
+            # Asegurarse de que el cliente cierre su conexión persistente
             await hass.async_add_executor_job(coordinator.client.close)
             _LOGGER.debug("AMT-8000 client connection closed during unload.")
 
