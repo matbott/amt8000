@@ -1,10 +1,10 @@
-"""The Intelbras AMT 8000 alarm integration."""
+# Archivo: __init__.py
 
 import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant # Asegurarse de que esté importado
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -28,6 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     amt_client = ISecClient(host, port)
 
     coordinator = AmtCoordinator(
+        hass, # <--- ¡CAMBIO CRÍTICO AQUÍ! Pasar hass al coordinador
         hass.async_add_executor_job,
         amt_client,
         password
@@ -65,7 +66,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
         if coordinator.client:
-            # Asegurarse de que el cliente cierre su conexión persistente
             await hass.async_add_executor_job(coordinator.client.close)
             _LOGGER.debug("AMT-8000 client connection closed during unload.")
 
