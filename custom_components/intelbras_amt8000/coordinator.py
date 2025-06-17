@@ -1,5 +1,7 @@
 """Coordinator for amt-8000 communication."""
 
+print("DEBUG: AmtCoordinator loaded")
+
 import logging
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime, timedelta
