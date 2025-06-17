@@ -17,7 +17,7 @@ class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, async_add_executor_job: Callable[..., Any], client: ISecClient, password: str) -> None:
         """Initialize the coordinator."""
         super().__init__(
-            None, # hass will be set by the config entry, but for a simple coordinator we don't strictly need it here
+            None,
             _LOGGER,
             name=DOMAIN,
             update_interval=SCAN_INTERVAL,
@@ -28,7 +28,7 @@ class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.paired_zones: Optional[Dict[str, bool]] = None
         self._is_connected = False
 
-    async def async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> Dict[str, Any]: # <-- ¡ESTE ES EL CAMBIO CRÍTICO, EL GUION BAJO!
         """Fetch and process data from AMT-8000. This is the main update method."""
         _LOGGER.debug("Attempting to update coordinator data.")
 
