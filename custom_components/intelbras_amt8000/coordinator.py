@@ -28,7 +28,7 @@ class AmtCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self.paired_zones: Optional[Dict[str, bool]] = None
         self._is_connected = False
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def async_update_data(self) -> Dict[str, Any]:
         """Fetch and process data from AMT-8000. This is the main update method."""
         _LOGGER.debug("Attempting to update coordinator data.")
 
