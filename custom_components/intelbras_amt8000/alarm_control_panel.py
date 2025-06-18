@@ -18,7 +18,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import CommunicationError, MAX_ZONES # <--- ¡IMPORTAR MAX_ZONES!
+# MAX_ZONES ya no se importa
+from .client import CommunicationError
 from .coordinator import AmtCoordinator
 from .const import (
     DOMAIN,
@@ -45,7 +46,7 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
     def __init__(self, coordinator: AmtCoordinator, entry: ConfigEntry) -> None:
         """Initialize the alarm control panel."""
         super().__init__(coordinator)
-        self._entry = entry # Guardar la entrada para acceso futuro
+        self._entry = entry
         self._attr_name = f"Intelbras AMT 8000 ({entry.data[CONF_HOST]})"
         self._attr_unique_id = entry.entry_id
         self._attr_code_format = CodeFormat.NUMBER
@@ -67,8 +68,7 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         )
         
         self._attr_extra_state_attributes = {} 
-        # Cargar la cantidad total de zonas como un atributo estático inicial
-        self._attr_extra_state_attributes["total_zones"] = MAX_ZONES # <--- ¡NUEVO ATRIBUTO!
+        # --- La línea que cargaba "total_zones" ha sido eliminada ---
         self._update_state_from_coordinator_data()
 
     @callback
@@ -98,7 +98,7 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         self._attr_extra_state_attributes["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
         self._attr_extra_state_attributes["host"] = self._entry.data[CONF_HOST]
         self._attr_extra_state_attributes["port"] = self._entry.data[CONF_PORT]
-        # total_zones ya fue cargado en __init__, es estático. No necesita actualización aquí.
+        # --- El comentario sobre total_zones ha sido eliminado ---
 
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
@@ -116,8 +116,8 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to arm system away.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while arming away: %s", e)
-            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
-            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+            self.coordinator._is_connected = False
+            await self.coordinator.async_request_refresh()
 
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -135,8 +135,8 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to arm system home.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while arming home: %s", e)
-            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
-            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+            self.coordinator._is_connected = False
+            await self.coordinator.async_request_refresh()
 
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
@@ -154,8 +154,8 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to disarm system.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while disarming: %s", e)
-            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
-            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+            self.coordinator._is_connected = False
+            await self.coordinator.async_request_refresh()
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger panic alarm."""
@@ -169,5 +169,5 @@ class AmtAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 _LOGGER.error("Failed to trigger panic alarm.")
         except CommunicationError as e:
             _LOGGER.error("Communication error while triggering panic: %s", e)
-            self.coordinator._is_connected = False # Forzar reconexión en el próximo ciclo
-            await self.coordinator.async_request_refresh() # Refrescar para intentar reconectar
+            self.coordinator._is_connected = False
+            await self.coordinator.async_request_refresh()
