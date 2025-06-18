@@ -24,9 +24,9 @@ ALARM_STATE_ARMED_AWAY = "armed_away"
 # ALARM_STATE_UNKNOWN = "unknown"
 
 # Sensor types
-SENSOR_TYPE_ZONE = "zone"
+# SENSOR_TYPE_ZONE = "zone"  <-- ELIMINADO
 SENSOR_TYPE_BATTERY = "battery"
 SENSOR_TYPE_TAMPER = "tamper"
 SENSOR_TYPE_SIREN = "siren"
-SENSOR_TYPE_ZONES_CLOSED = "zones_all_closed"
-SENSOR_TYPE_ZONES_FIRING = "zones_firing" # Nueva constante
+# SENSOR_TYPE_ZONES_CLOSED = "zones_all_closed"  <-- ELIMINADO
+SENSOR_TYPE_ZONES_FIRING = "zones_firing"
