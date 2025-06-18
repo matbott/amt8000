@@ -4,7 +4,6 @@ import logging
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_ON, STATE_OFF
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -14,11 +13,9 @@ from .const import (
     DOMAIN,
     CONF_HOST,
     CONF_PORT,
-    SENSOR_TYPE_ZONE,
     SENSOR_TYPE_BATTERY,
     SENSOR_TYPE_TAMPER,
     SENSOR_TYPE_SIREN,
-    SENSOR_TYPE_ZONES_CLOSED,
     SENSOR_TYPE_ZONES_FIRING,
 )
 
@@ -35,15 +32,10 @@ async def async_setup_entry(
     entities.append(AmtBatterySensor(coordinator, entry))
     entities.append(AmtTamperBinarySensor(coordinator, entry))
     entities.append(AmtSirenBinarySensor(coordinator, entry))
-    entities.append(AmtAllZonesClosedBinarySensor(coordinator, entry))
     entities.append(AmtZonesFiringBinarySensor(coordinator, entry))
 
-    if coordinator.paired_zones:
-        _LOGGER.debug(f"Setting up binary sensors for paired zones: {coordinator.paired_zones.keys()}")
-        for zone_id in coordinator.paired_zones:
-            entities.append(AmtZoneBinarySensor(coordinator, entry, zone_id))
-    else:
-        _LOGGER.warning("No paired zones retrieved, skipping zone sensor setup.")
+    # --- Bloque de creación de sensores de zona eliminado ---
+    _LOGGER.info("Skipping individual zone sensor setup as it is disabled.")
 
     async_add_entities(entities)
 
@@ -134,7 +126,6 @@ class AmtTamperBinarySensor(AmtBaseSensor, BinarySensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # No es necesario actualizar _attr_is_on aquí, ya que se usa la propiedad is_on
         if self._attr_device_info:
             self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
             self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
@@ -171,76 +162,10 @@ class AmtSirenBinarySensor(AmtBaseSensor, BinarySensorEntity):
         self.async_write_ha_state()
 
 
-class AmtZoneBinarySensor(AmtBaseSensor, BinarySensorEntity):
-    """Representation of an individual zone (binary sensor)."""
-
-    def __init__(self, coordinator: AmtCoordinator, entry: ConfigEntry, zone_id: str) -> None:
-        """Initialize the zone sensor."""
-        super().__init__(coordinator, entry, SENSOR_TYPE_ZONE, zone_id)
-        self._attr_name = f"Zone {zone_id}"
-        self._attr_device_class = "window"
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return True if the entity is on."""
-        return self.coordinator.data["zones"].get(self._sensor_id, "unknown") == "open"
-
-    @property
-    def state(self) -> str | None:
-        """Return the state of the binary sensor."""
-        if self.is_on:
-            return "Abierta"
-        return "Cerrada"
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        if self._attr_device_info:
-            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
-            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
-        self.async_write_ha_state()
+# --- Clase AmtZoneBinarySensor eliminada ---
 
 
-class AmtAllZonesClosedBinarySensor(AmtBaseSensor, BinarySensorEntity):
-    """Binary sensor indicating if all paired zones are closed."""
-
-    def __init__(self, coordinator: AmtCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, entry, SENSOR_TYPE_ZONES_CLOSED)
-        self._attr_name = "Intelbras Alarm All Zones Closed"
-        self._attr_device_class = "safety"
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return True if the entity is on."""
-        return self._check_all_zones_closed()
-
-    @property
-    def state(self) -> str | None:
-        """Return the state of the binary sensor."""
-        if self.is_on:
-            return "Todas Cerradas"
-        return "Algunas Abiertas"
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        if self._attr_device_info:
-            self._attr_device_info["model"] = self.coordinator.data["general_status"].get("model", "AMT 8000")
-            self._attr_device_info["sw_version"] = self.coordinator.data["general_status"].get("version", "Unknown")
-        self.async_write_ha_state()
-
-    def _check_all_zones_closed(self) -> bool:
-        """Check if all *paired* zones are in a 'closed' state."""
-        if not self.coordinator.paired_zones:
-            return True
-
-        for zone_id, status in self.coordinator.data["zones"].items():
-            if zone_id in self.coordinator.paired_zones and status == "open":
-                _LOGGER.debug(f"Zone {zone_id} is open, so not all zones are closed.")
-                return False
-        _LOGGER.debug("All paired zones are closed.")
-        return True
+# --- Clase AmtAllZonesClosedBinarySensor eliminada ---
 
 
 class AmtZonesFiringBinarySensor(AmtBaseSensor, BinarySensorEntity):
